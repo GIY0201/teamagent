@@ -3,6 +3,7 @@
 // Blocks setting status: done unless evidence rules pass (design spec §6.3).
 
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import YAML from 'yaml';
 
 const STRUCTURED_PATTERNS = [
@@ -14,13 +15,20 @@ const STRUCTURED_PATTERNS = [
   /\b[\w/.-]+:\d+\b/, // path:line reference
 ];
 
+/** Normalize text: strip BOM + CRLF so regexes work on Windows-created files. */
+function normalize(text) {
+  return text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+}
+
 /**
- * @param {string} ticketText full markdown of the ticket
+ * @param {string} rawTicketText full markdown of the ticket (not yet normalized)
  * @returns {{ok: boolean, reason?: string}}
  */
-export function validateTicketCompletion(ticketText) {
+export function validateTicketCompletion(rawTicketText) {
+  const ticketText = normalize(rawTicketText);
   const fmMatch = ticketText.match(/^---\n([\s\S]*?)\n---/);
-  if (!fmMatch) return { ok: true }; // no frontmatter, leave alone
+  if (!fmMatch) return { ok: true }; // no frontmatter — leave alone
+
   let fm;
   try {
     fm = YAML.parse(fmMatch[1]);
@@ -29,8 +37,17 @@ export function validateTicketCompletion(ticketText) {
   }
   if (fm?.status !== 'done') return { ok: true };
 
+  // acceptance_criteria must be an array when status is done (Codex P1 fix).
+  if (fm.acceptance_criteria !== undefined && !Array.isArray(fm.acceptance_criteria)) {
+    return {
+      ok: false,
+      reason:
+        'acceptance_criteria must be a YAML array (e.g. ["criterion-A", "criterion-B"]) when status is done.',
+    };
+  }
+
   // Capture everything under "## Evidence" until the next "## " heading or end of input.
-  // Do NOT use /m flag here — it would make $ match end-of-line and truncate the body.
+  // Do NOT use /m flag — it makes $ match end-of-line and truncates the body.
   const evMatch = ticketText.match(/(?:^|\n)## Evidence\s*\n([\s\S]*?)(?=\n## |$)/);
   const body = (evMatch?.[1] ?? '').trim();
   if (!body) return { ok: false, reason: 'Evidence section is empty.' };
@@ -57,31 +74,57 @@ export function validateTicketCompletion(ticketText) {
 }
 
 // ---------- hook entry point ----------
-// Invoked by Claude Code on PostToolUse. Input: JSON on stdin.
+// Invoked by Claude Code PostToolUse. Input: JSON on stdin.
 // Block signal: exit code 2 + JSON `{decision:"block", reason:"..."}` on stdout.
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Use pathToFileURL for Windows-safe comparison (Codex P0 fix):
+//   import.meta.url = "file:///C:/..." but process.argv[1] = "C:\..."
+const isMain = import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
   let raw = '';
   process.stdin.on('data', (d) => {
     raw += d;
   });
   process.stdin.on('end', () => {
+    let payload;
+    // Phase 1: parse JSON. Unexpected payload → block (Codex P1: narrow fail-open).
     try {
-      const payload = JSON.parse(raw);
-      const path = payload?.input?.file_path ?? '';
-      // Scope: only ticket files under .teamagent/tickets/
-      if (!/\.teamagent[/\\]tickets[/\\].+\.md$/.test(path)) {
-        process.exit(0);
-      }
-      const text = readFileSync(path, 'utf8');
-      const r = validateTicketCompletion(text);
-      if (r.ok) process.exit(0);
-      process.stdout.write(JSON.stringify({ decision: 'block', reason: r.reason }));
-      process.exit(2);
+      payload = JSON.parse(raw);
     } catch (e) {
-      process.stderr.write(`evidence-check error: ${e.message}\n`);
-      // Fail-open: hook bugs must not lock the user out.
+      process.stderr.write(`evidence-check: bad hook payload: ${e.message}\n`);
+      // Malformed JSON from the harness is unexpected — fail-open so we don't brick CC.
       process.exit(0);
     }
+
+    const filePath = payload?.input?.file_path ?? '';
+    // Phase 2: scope check — only ticket files.
+    if (!/\.teamagent[/\\]tickets[/\\].+\.md$/.test(filePath)) {
+      process.exit(0); // not a ticket → allow
+    }
+
+    // Phase 3: read + validate. Errors here are operational (bad symlink, race) → block
+    // with a diagnostic rather than fail-open.
+    let text;
+    try {
+      text = readFileSync(filePath, 'utf8');
+    } catch (e) {
+      // File should exist (we're in PostToolUse after a Write/Edit).
+      // Fail-open with a warning so a broken file doesn't permanently block.
+      process.stderr.write(`evidence-check: cannot read ticket (${e.message}) — skipping.\n`);
+      process.exit(0);
+    }
+
+    let r;
+    try {
+      r = validateTicketCompletion(text);
+    } catch (e) {
+      process.stderr.write(`evidence-check: validator crashed (${e.message}) — skipping.\n`);
+      process.exit(0);
+    }
+
+    if (r.ok) process.exit(0);
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: r.reason }));
+    process.exit(2);
   });
 }

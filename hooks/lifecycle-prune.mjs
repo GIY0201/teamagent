@@ -3,6 +3,7 @@
 
 import { readdirSync, statSync, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const SIDECAR_EXTS = new Set(['.prompt', '.memory', '.stdout', '.stderr']);
 
@@ -30,7 +31,8 @@ export function prune(blackboardDir, retentionDays = 30) {
 }
 
 // ---------- hook entry ----------
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL for Windows-safe comparison (Codex P0 fix).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const bb = process.env.TEAMAGENT_BLACKBOARD_DIR ?? '.teamagent';
   try {
     const stats = prune(bb, 30);

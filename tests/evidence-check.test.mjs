@@ -74,3 +74,25 @@ test('validateTicketCompletion: not setting status=done returns ok=true', () => 
   const r = validateTicketCompletion(text);
   assert.equal(r.ok, true);
 });
+
+test('validateTicketCompletion: CRLF line endings still validate (Windows files)', () => {
+  const crlf = good.replace(/\n/g, '\r\n');
+  const r = validateTicketCompletion(crlf);
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
+test('validateTicketCompletion: UTF-8 BOM stripped (Windows editors)', () => {
+  const bom = '﻿' + good;
+  const r = validateTicketCompletion(bom);
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
+test('validateTicketCompletion: acceptance_criteria as string (not array) fails', () => {
+  const text = good.replace(
+    'acceptance_criteria:\n  - "Tests pass"\n  - "Lint clean"',
+    'acceptance_criteria: "Tests pass, Lint clean"'
+  );
+  const r = validateTicketCompletion(text);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /array/i);
+});
