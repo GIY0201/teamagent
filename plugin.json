@@ -1,7 +1,30 @@
 {
   "name": "teamagent",
   "version": "0.1.0",
-  "description": "Claude Code + Codex + Gemini team orchestration via CLI subprocesses (no API keys). See plan/2026-04-24-teamagent-design.md.",
+  "description": "Claude Code + Codex + Gemini team orchestration via CLI subprocesses (no API keys).",
   "author": "kiyong",
-  "license": "MIT"
+  "license": "MIT",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/evidence-check.mjs"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/lifecycle-prune.mjs"
+          }
+        ]
+      }
+    ]
+  }
 }
