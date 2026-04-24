@@ -1,0 +1,17 @@
+{
+  "name": "teamagent",
+  "owner": {
+    "name": "kiyong"
+  },
+  "plugins": [
+    {
+      "name": "teamagent",
+      "source": ".",
+      "description": "Claude Code + Codex + Gemini team orchestration via CLI subprocesses. No API keys — uses existing CLI subscriptions.",
+      "version": "0.1.0",
+      "author": {
+        "name": "kiyong"
+      }
+    }
+  ]
+}

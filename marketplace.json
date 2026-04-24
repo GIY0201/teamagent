@@ -1,0 +1,12 @@
+{
+  "name": "teamagent",
+  "description": "Local teamagent plugin — Claude Code + Codex + Gemini team orchestration",
+  "plugins": [
+    {
+      "name": "teamagent",
+      "description": "Orchestrate Codex CLI and Gemini CLI as specialist subagents from Claude Code. No API keys — uses existing CLI subscriptions.",
+      "source": ".",
+      "category": "development"
+    }
+  ]
+}
