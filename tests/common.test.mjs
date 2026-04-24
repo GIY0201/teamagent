@@ -67,6 +67,40 @@ test('sha256: deterministic and distinct', () => {
   assert.equal(sha256('abc').length, 64);
 });
 
+test('spawnWithTimeout: ENOENT -> spawnError, no throw', async () => {
+  const r = await spawnWithTimeout('this-binary-does-not-exist-xyz123', [], { timeoutMs: 5000 });
+  // Either spawnError set (Unix) or non-zero exit from shell (Windows)
+  if (r.spawnError !== undefined) {
+    assert.match(r.spawnError, /ENOENT|not found|not recognized|Command failed/i);
+  } else {
+    assert.notEqual(r.exitCode, 0);
+  }
+  assert.equal(r.timedOut, false);
+});
+
+test('spawnWithTimeout: stdin closed by default so programs reading stdin do not hang', async () => {
+  // Program reads stdin until EOF and exits; without EOF it would hang until timeoutMs.
+  const start = Date.now();
+  const r = await spawnWithTimeout(
+    'node',
+    ['-e', 'let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>process.stdout.write(s||"EMPTY"))'],
+    { timeoutMs: 5000 }
+  );
+  assert.equal(r.timedOut, false);
+  assert.ok(Date.now() - start < 2000, 'must finish well under timeout');
+  assert.equal(r.stdout, 'EMPTY');
+});
+
+test('truncateBytes: preserves UTF-8 boundary (no U+FFFD)', () => {
+  // 한 (3 bytes in UTF-8) repeated
+  const input = '한'.repeat(10); // 30 bytes
+  const out = truncateBytes(input, 10); // cut mid-character at byte 10
+  const body = out.split('\n[truncated')[0];
+  assert.ok(!body.includes('�'), 'body must not contain replacement char');
+  // Body length in bytes must be <= maxBytes
+  assert.ok(Buffer.byteLength(body, 'utf8') <= 10);
+});
+
 test('writeSidecar + writeAuditEvent: round-trip', () => {
   const dir = mkdtempSync(join(tmpdir(), 'tta-'));
   const runId = '2026-04-24-001';
