@@ -1,0 +1,4 @@
+node_modules/
+.teamagent/
+*.log
+.DS_Store

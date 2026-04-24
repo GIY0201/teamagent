@@ -1,0 +1,7 @@
+{
+  "name": "teamagent",
+  "version": "0.1.0",
+  "description": "Claude Code + Codex + Gemini team orchestration via CLI subprocesses (no API keys). See plan/2026-04-24-teamagent-design.md.",
+  "author": "kiyong",
+  "license": "MIT"
+}
