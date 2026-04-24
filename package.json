@@ -5,9 +5,9 @@
   "description": "Claude Code plugin for Codex + Gemini CLI orchestration.",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test tests/",
-    "test:watch": "node --test --watch tests/",
-    "test:integration": "TEAMAGENT_INTEGRATION=1 node --test tests/integration/"
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:watch": "node --test --watch \"tests/**/*.test.mjs\"",
+    "test:integration": "cross-env TEAMAGENT_INTEGRATION=1 node --test \"tests/integration/**/*.test.mjs\""
   },
   "dependencies": {
     "tree-kill": "^1.2.2",
